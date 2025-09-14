@@ -4,19 +4,19 @@ import { Delaunay } from '../index.ts';
 
 t('ccw left turn with left-handed system', function (t) {
     const triangulator = new Delaunay();
-    t.same(triangulator.ccw([0, 0], [-1, 0], [0, -1]), true);
+    t.same(triangulator.ccw([0, 0], [-1, 0], [0, -1]) > 0, true);
     t.end();
 });
 
 t('ccw left turn with colinear points', function (t) {
     const triangulator = new Delaunay();
-    t.same(triangulator.ccw([0, 0], [0, 1], [0, 2]), false);
+    t.same(triangulator.ccw([0, 0], [0, 1], [0, 2]) > 0, false);
     t.end();
 });
 
 t('ccw left turn with right-handed system', function (t) {
     const triangulator = new Delaunay();
-    t.same(triangulator.ccw([0, 0], [0, 1], [0, 2]), false);
+    t.same(triangulator.ccw([0, 0], [0, 1], [0, 2]) > 0, false);
     t.end();
 });
 
@@ -71,25 +71,30 @@ t('inCircle on circle\'s edge', function (t) {
 });
 
 t('inCircle outside the circle', function (t) {
-    var triangulator = new Delaunay();
+    const triangulator = new Delaunay();
     t.same(triangulator.inCircle([0, 1], [-1, 0], [1, 0], [-1, -1]), false);
     t.end();
 });
 
 t('Examples data', function (t) {
     ['4', 'dots', 'flag', 'grid', 'ladder', 'spiral', 'tri'].forEach(function (fileName) {
-        var pts = readPointsFromFile('test/data/' + fileName + '.node');
-        var d = new Delaunay(pts);
-        var faces = d.triangulate();
+        const pts = readPointsFromFile('test/data/' + fileName + '.node');
+
+        console.time(fileName);
+        const d = new Delaunay(pts);
+        const faces = d.triangulate();
+
+        console.timeEnd(fileName);
 
         // Check all the circumcircles and all the points
-        for (var i = 0; i < faces.length; i += 3)
-            for (var j = 0; j < pts.length; j++) {
+        for (let i = 0; i < faces.length; i += 3)
+            for (let j = 0; j < pts.length; j++) {
                 if (d.inCircle(faces[i], faces[i + 1], faces[i + 2], pts[j]))
                     t.fail('Algorithm fails for file ' + fileName + ': point (' + pts[j] +
                         ') is in the circumcircle delimited by (' + faces[i] + '), (' + faces[i + 1] +
                         '), (' + faces[i + 2] + ').');
             }
+
     });
 
     t.end();

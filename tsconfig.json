@@ -1,12 +1,14 @@
 {
     "compilerOptions": {
         "module": "nodenext",
+        "moduleResolution": "nodenext",
         "target": "esnext",
         "types": [],
         "declaration": true,
         "allowJs": true,
         "checkJs": true,
         "emitDeclarationOnly": true,
+        "allowImportingTsExtensions": true,
         "strict": true,
         "exactOptionalPropertyTypes": true,
         "verbatimModuleSyntax": true,
@@ -14,7 +16,8 @@
         "moduleDetection": "force",
         "skipLibCheck": true
     },
-    "files": [
-        "index.ts"
+    "include": [
+        "index.ts",
+        "util/**/*.ts"
     ]
 }

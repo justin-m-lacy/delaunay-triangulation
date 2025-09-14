@@ -3,7 +3,6 @@
  An implementation of Guibas & Stolfi's O(nlogn) Delaunay triangulation algorithm
  https://github.com/Bathlamos/delaunay-triangulation
  */
-import { orient2d } from 'robust-predicates';
 
 type TPoint = [number, number];
 
@@ -12,7 +11,7 @@ export class Delaunay {
     private points: TPoint[];
 
     constructor(points: TPoint[]) {
-        this.points = points || [];
+        this.points = points;
     }
 
     triangulate(): TPoint[] {
@@ -28,7 +27,7 @@ export class Delaunay {
 
         if (pts.length < 2) return [];
 
-        let quadEdge: QuadEdge = delaunay(pts).le;
+        let quadEdge: QuadEdge = delaunay(pts, 0, pts.length).le;
 
         //All edges marked false
         const faces: TPoint[] = [];
@@ -81,19 +80,19 @@ Computes | a.x  a.y  1 |
          | c.x  c.y  1 |
  */
 function ccw(a: TPoint, b: TPoint, c: TPoint) {
-    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) > 0;
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
 function rightOf(x: TPoint, e: QuadEdge) {
-    return ccw(x, e.to, e.from!);
+    return ccw(x, e.to, e.from!) > 0;
 }
 
 function leftOf(x: TPoint, e: QuadEdge) {
-    return ccw(x, e.from!, e.to);
+    return ccw(x, e.from!, e.to) > 0;
 }
 
 function valid(e: QuadEdge, basel: QuadEdge) {
-    return ccw(e.to, basel.to, basel.from!);
+    return ccw(e.to, basel.to, basel.from!) > 0;
 }
 
 /*
@@ -101,28 +100,8 @@ function valid(e: QuadEdge, basel: QuadEdge) {
           | b.x  b.y  b.x�+b.y�  1 | > 0
           | c.x  c.y  c.x�+c.y�  1 |
           | p.x  p.y  p.x�+d.y�  1 |
-  Modified formula from delaunator.
- * Return true is p is in the circumcircle of a, b, c
-
+  Return true if p is in the circumcircle of a, b, c
  */
-function inCircle2(a: TPoint, b: TPoint, c: TPoint, p: TPoint) {
-
-    const dx = a[0] - p[0];
-    const dy = a[1] - p[1];
-    const ex = b[0] - p[0];
-    const ey = b[1] - p[1];
-    const fx = c[0] - p[0];
-    const fy = c[1] - p[1];
-
-    const bp = ex * ex + ey * ey;
-    const cp = fx * fx + fy * fy;
-
-    // use robust predicates for better accuracy.
-    return dx * (ey * cp - bp * fy) -
-        dy * (ex * cp - bp * fx)
-        < (dx * dx + dy * dy) * (ey * fx - ex * fy);
-}
-
 function inCircle(a: TPoint, b: TPoint, c: TPoint, d: TPoint) {
 
     if ((a[0] === d[0] && a[1] === d[1])
@@ -130,12 +109,11 @@ function inCircle(a: TPoint, b: TPoint, c: TPoint, d: TPoint) {
         || (c[0] === d[0] && c[1] === d[1]))
         return false;
 
-    var sa = a[0] * a[0] + a[1] * a[1],
-        sb = b[0] * b[0] + b[1] * b[1],
+    const sb = b[0] * b[0] + b[1] * b[1],
         sc = c[0] * c[0] + c[1] * c[1],
         sd = d[0] * d[0] + d[1] * d[1];
 
-    var d1 = sc - sd,
+    const d1 = sc - sd,
         d2 = c[1] - d[1],
         d3 = c[1] * sd - sc * d[1],
         d4 = c[0] - d[0],
@@ -144,7 +122,7 @@ function inCircle(a: TPoint, b: TPoint, c: TPoint, d: TPoint) {
 
     return a[0] * (b[1] * d1 - sb * d2 + d3)
         - a[1] * (b[0] * d1 - sb * d4 + d5)
-        + sa * (b[0] * d2 - b[1] * d4 + d6)
+        + (a[0] * a[0] + a[1] * a[1]) * (b[0] * d2 - b[1] * d4 + d6)
         - b[0] * d3 + b[1] * d5 - sb * d6 > 1; // We have an issue here with number accuracy
 }
 
@@ -201,15 +179,15 @@ function splice(a: QuadEdge, b: QuadEdge) {
     const alpha = a.onext.rot,
         beta = b.onext.rot;
 
-    const t2 = a.onext,
-        t3 = beta.onext;
+    let temp = a.onext;
     //  t4 = alpha.onext;
 
     a.onext = b.onext;
-    b.onext = t2;
+    b.onext = temp;
 
+    temp = beta.onext;
     beta.onext = alpha.onext;
-    alpha.onext = t3;
+    alpha.onext = temp;
     // beta.onext = t4;
 }
 
@@ -232,20 +210,28 @@ function deleteEdge(q: QuadEdge) {
     splice(q.sym, q.sym.oprev);
 }
 
-export function delaunay(s: TPoint[]): { le: QuadEdge, re: QuadEdge } {
+/**
+ * 
+ * @param s 
+ * @param low - inclusive low point to process.
+ * @param high - exclusive limit of delaunay points to process. 
+ * @returns 
+ */
+export function delaunay(s: TPoint[], low: number = 0, high: number): { le: QuadEdge, re: QuadEdge } {
 
-    if (s.length === 2) {
-        const a = makeEdge(s[0], s[1]);
+    if (high - low === 2) {
+        const a = makeEdge(s[low], s[low + 1]);
         return {
             le: a,
             re: a.sym
         }
-    } else if (s.length === 3) {
-        const a = makeEdge(s[0], s[1]);
-        const b = makeEdge(s[1], s[2]);
+    } else if (high - low === 3) {
+        const a = makeEdge(s[low], s[low + 1]);
+        const b = makeEdge(s[low + 1], s[low + 2]);
         splice(a.sym, b);
 
-        const orient = orient2d(s[0][0], s[0][1], s[1][0], s[1][1], s[2][0], s[2][1]);
+        const orient = ccw(s[low], s[low + 1], s[low + 2]);
+        //const orient = orient2d(s[0][0], s[0][1], s[1][0], s[1][1], s[2][0], s[2][1]);
 
         if (orient > 0) {
             connect(b, a);
@@ -267,10 +253,11 @@ export function delaunay(s: TPoint[]): { le: QuadEdge, re: QuadEdge } {
             }
         }
     }
+
     // |S| >= 4
-    const half_length = Math.ceil(s.length / 2);
-    let { le: ldo, re: ldi } = delaunay(s.slice(0, half_length));
-    let { le: rdi, re: rdo, } = delaunay(s.slice(half_length));
+    const halfLen = Math.ceil((high + low) / 2);
+    let { le: ldo, re: ldi } = delaunay(s, low, halfLen);
+    let { le: rdi, re: rdo, } = delaunay(s, halfLen, high);
 
     // Compute the lower common tangent of L and R
     do {
@@ -333,4 +320,61 @@ export function delaunay(s: TPoint[]): { le: QuadEdge, re: QuadEdge } {
         re: rdo
     }
 
+}
+
+
+/**
+ * Sort points by distance via an array of point indices and an array of calculated distances.
+ *
+ * @param ids
+ * @param dists
+ * @param left
+ * @param right
+ */
+function quicksort(ids: Uint32Array, dists: Float64Array, left: number, right: number) {
+    if (right - left <= 20) {
+        for (let i = left + 1; i <= right; i++) {
+            const temp = ids[i];
+            const tempDist = dists[temp];
+            let j = i - 1;
+            while (j >= left && dists[ids[j]] > tempDist) ids[j + 1] = ids[j--];
+            ids[j + 1] = temp;
+        }
+    } else {
+        const median = (left + right) >> 1;
+        let i = left + 1;
+        let j = right;
+        swap(ids, median, i);
+        if (dists[ids[left]] > dists[ids[right]]) swap(ids, left, right);
+        if (dists[ids[i]] > dists[ids[right]]) swap(ids, i, right);
+        if (dists[ids[left]] > dists[ids[i]]) swap(ids, left, i);
+
+        const temp = ids[i];
+        const tempDist = dists[temp];
+        while (true) {
+            do i++; while (dists[ids[i]] < tempDist);
+            do j--; while (dists[ids[j]] > tempDist);
+            if (j < i) break;
+            swap(ids, i, j);
+        }
+        ids[left + 1] = ids[j];
+        ids[j] = temp;
+
+        if (right - i + 1 >= j - left) {
+            quicksort(ids, dists, i, right);
+            quicksort(ids, dists, left, j - 1);
+        } else {
+            quicksort(ids, dists, left, j - 1);
+            quicksort(ids, dists, i, right);
+        }
+    }
+}
+
+/**
+ * swap indices
+ */
+function swap(a: Uint32Array, i: number, j: number) {
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
 }
